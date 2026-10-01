@@ -37,10 +37,10 @@ public class ItemServiceImpl implements ItemService {
             throw new NotFoundException("Вещь с id=" + itemId + " не принадлежит пользователю id=" + userId);
         }
 
-        if (dto.getName() != null) {
+        if (dto.getName() != null && !dto.getName().isBlank()) {
             item.setName(dto.getName());
         }
-        if (dto.getDescription() != null) {
+        if (dto.getDescription() != null && !dto.getDescription().isBlank()) {
             item.setDescription(dto.getDescription());
         }
         if (dto.getAvailable() != null) {
