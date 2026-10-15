@@ -38,4 +38,10 @@ public class ErrorHandler {
                 .orElse("Ошибка валидации");
         return Map.of("error", message);
     }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public Map<String, String> handleAccessDenied(AccessDeniedException e) {
+        return Map.of("error", e.getMessage());
+    }
 }

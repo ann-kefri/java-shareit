@@ -2,14 +2,23 @@ package ru.practicum.shareit.item;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import ru.practicum.shareit.booking.Booking;
+import ru.practicum.shareit.booking.BookingRepository;
+import ru.practicum.shareit.booking.BookingStatus;
 import ru.practicum.shareit.exception.NotFoundException;
+import ru.practicum.shareit.exception.ValidationException;
+import ru.practicum.shareit.item.dto.CommentDto;
 import ru.practicum.shareit.item.dto.ItemDto;
+import ru.practicum.shareit.item.dto.ItemWithBookingsDto;
+import ru.practicum.shareit.item.dto.NewCommentDto;
 import ru.practicum.shareit.item.dto.NewItemDto;
 import ru.practicum.shareit.item.dto.UpdateItemDto;
+import ru.practicum.shareit.item.model.Comment;
 import ru.practicum.shareit.item.model.Item;
 import ru.practicum.shareit.user.User;
 import ru.practicum.shareit.user.UserRepository;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -18,6 +27,8 @@ public class ItemServiceImpl implements ItemService {
 
     private final ItemRepository itemRepository;
     private final UserRepository userRepository;
+    private final BookingRepository bookingRepository;
+    private final CommentRepository commentRepository;
 
     @Override
     public ItemDto create(Long userId, NewItemDto dto) {
@@ -50,25 +61,114 @@ public class ItemServiceImpl implements ItemService {
     }
 
     @Override
-    public ItemDto getById(Long itemId) {
-        return itemRepository.findById(itemId)
-                .map(ItemMapper::toItemDto)
+    public ItemWithBookingsDto getById(Long userId, Long itemId) {
+        Item item = itemRepository.findById(itemId)
                 .orElseThrow(() -> new NotFoundException("Вещь с id=" + itemId + " не найдена"));
+
+        ItemWithBookingsDto dto = toItemWithBookings(item);
+
+        // Комментарии — видны всем
+        dto.setComments(commentRepository.findAllByItemId(itemId).stream()
+                .map(CommentMapper::toCommentDto)
+                .toList());
+
+        // lastBooking/nextBooking — только владельцу
+        if (item.getOwner().getId().equals(userId)) {
+            LocalDateTime now = LocalDateTime.now();
+            List<Booking> bookings = bookingRepository
+                    .findAllByItemIdAndStatusOrderByStartAsc(itemId, BookingStatus.APPROVED);
+
+            bookings.stream()
+                    .filter(b -> b.getEnd().isBefore(now))
+                    .reduce((first, second) -> second)     // последнее из прошедших
+                    .ifPresent(b -> dto.setLastBooking(b.getStart()));
+
+            bookings.stream()
+                    .filter(b -> b.getStart().isAfter(now))
+                    .findFirst()                            // ближайшее будущее
+                    .ifPresent(b -> dto.setNextBooking(b.getStart()));
+        }
+
+        return dto;
     }
 
     @Override
-    public List<ItemDto> getAllByOwner(Long userId) {
+    public List<ItemWithBookingsDto> getAllByOwner(Long userId) {
         userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+
+        LocalDateTime now = LocalDateTime.now();
+
         return itemRepository.findAllByOwnerId(userId).stream()
-                .map(ItemMapper::toItemDto)
+                .map(item -> {
+                    ItemWithBookingsDto dto = toItemWithBookings(item);
+                    List<Booking> bookings = bookingRepository
+                            .findAllByItemIdAndStatusOrderByStartAsc(item.getId(), BookingStatus.APPROVED);
+
+                    bookings.stream()
+                            .filter(b -> b.getEnd().isBefore(now))
+                            .reduce((first, second) -> second)
+                            .ifPresent(b -> dto.setLastBooking(b.getStart()));
+
+                    bookings.stream()
+                            .filter(b -> b.getStart().isAfter(now))
+                            .findFirst()
+                            .ifPresent(b -> dto.setNextBooking(b.getStart()));
+
+                    dto.setComments(commentRepository.findAllByItemId(item.getId()).stream()
+                            .map(CommentMapper::toCommentDto)
+                            .toList());
+
+                    return dto;
+                })
                 .toList();
     }
 
     @Override
     public List<ItemDto> search(String text) {
+        if (text == null || text.isBlank()) {
+            return List.of();
+        }
         return itemRepository.search(text).stream()
                 .map(ItemMapper::toItemDto)
                 .toList();
+    }
+
+    @Override
+    public CommentDto createComment(Long userId, Long itemId, NewCommentDto dto) {
+        User author = userRepository.findById(userId)
+                .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
+
+        Item item = itemRepository.findById(itemId)
+                .orElseThrow(() -> new NotFoundException("Вещь с id=" + itemId + " не найдена"));
+
+        // Проверка: пользователь действительно брал вещь в аренду?
+        LocalDateTime now = LocalDateTime.now();
+        boolean hasApprovedPastBooking = bookingRepository
+                .findAllByItemIdAndStatusOrderByStartAsc(itemId, BookingStatus.APPROVED)
+                .stream()
+                .anyMatch(b -> b.getBooker().getId().equals(userId) && b.getEnd().isBefore(now));
+
+        if (!hasApprovedPastBooking) {
+            throw new ValidationException(
+                    "Пользователь с id=" + userId + " не брал вещь с id=" + itemId + " в аренду");
+        }
+
+        Comment comment = new Comment();
+        comment.setText(dto.getText());
+        comment.setItem(item);
+        comment.setAuthor(author);
+        comment.setCreated(now);
+
+        return CommentMapper.toCommentDto(commentRepository.save(comment));
+    }
+
+    private ItemWithBookingsDto toItemWithBookings(Item item) {
+        ItemWithBookingsDto dto = new ItemWithBookingsDto();
+        dto.setId(item.getId());
+        dto.setName(item.getName());
+        dto.setDescription(item.getDescription());
+        dto.setAvailable(item.getAvailable());
+        return dto;
     }
 }
