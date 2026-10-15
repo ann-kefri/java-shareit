@@ -30,15 +30,21 @@ public class UserServiceImpl implements UserService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + id + " не найден"));
 
+        if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
+            userRepository.findByEmail(dto.getEmail())
+                    .filter(u -> !u.getId().equals(id))
+                    .ifPresent(u -> {
+                        throw new ConflictException("Email уже используется: " + dto.getEmail());
+                    });
+        }
+
         if (dto.getName() != null && !dto.getName().isBlank()) {
             user.setName(dto.getName());
         }
         if (dto.getEmail() != null && !dto.getEmail().isBlank()) {
-            if (userRepository.existsByEmailAndIdNot(dto.getEmail(), id)) {
-                throw new ConflictException("Email уже используется: " + dto.getEmail());
-            }
             user.setEmail(dto.getEmail());
         }
+
         return UserMapper.toUserDto(userRepository.save(user));
     }
 
