@@ -1,12 +1,14 @@
 package ru.practicum.shareit.user;
 
 import jakarta.persistence.*;
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * TODO Sprint add-controllers.
  */
-@Data
+@Getter
+@Setter
 @Entity
 @Table(name = "users")
 public class User {

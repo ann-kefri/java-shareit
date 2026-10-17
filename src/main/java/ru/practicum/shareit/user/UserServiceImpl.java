@@ -1,5 +1,6 @@
 package ru.practicum.shareit.user;
 
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import ru.practicum.shareit.exception.ConflictException;
@@ -12,10 +13,12 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UserServiceImpl implements UserService {
 
     private final UserRepository userRepository;
 
+    @Transactional
     @Override
     public UserDto create(NewUserDto dto) {
         if (userRepository.existsByEmail(dto.getEmail())) {
@@ -25,6 +28,7 @@ public class UserServiceImpl implements UserService {
         return UserMapper.toUserDto(userRepository.save(user));
     }
 
+    @Transactional
     @Override
     public UserDto update(Long id, UpdateUserDto dto) {
         User user = userRepository.findById(id)
@@ -62,6 +66,7 @@ public class UserServiceImpl implements UserService {
                 .toList();
     }
 
+    @Transactional
     @Override
     public void delete(Long id) {
         User user = userRepository.findById(id)
