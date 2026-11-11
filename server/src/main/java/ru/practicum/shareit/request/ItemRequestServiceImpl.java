@@ -34,7 +34,7 @@ public class ItemRequestServiceImpl implements ItemRequestService {
         request.setRequestor(requestor);
         request.setCreated(LocalDateTime.now());
 
-        return ItemRequestMapper.toDto(requestRepository.save(request));
+        return enrichWithItems(requestRepository.save(request));
     }
 
     @Override
@@ -65,7 +65,7 @@ public class ItemRequestServiceImpl implements ItemRequestService {
                 .orElseThrow(() -> new NotFoundException("Пользователь с id=" + userId + " не найден"));
 
         ItemRequest request = requestRepository.findById(requestId)
-                .orElseThrow(() -> new NotFoundException("Запрос с id=" + userId + " не найден"));
+                .orElseThrow(() -> new NotFoundException("Запрос с id=" + requestId + " не найден"));
 
         return enrichWithItems(request);
     }
